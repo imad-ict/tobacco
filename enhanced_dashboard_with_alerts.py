@@ -90,7 +90,7 @@ st.set_page_config(
 # Pakistan timezone
 PAKISTAN_TZ = pytz.timezone('Asia/Karachi')
 
-# Auto-refresh every 30 minutes
+# Initialize session state BEFORE authentication check
 if "last_update" not in st.session_state:
     st.session_state.last_update = datetime.now(PAKISTAN_TZ)
 
@@ -1989,6 +1989,10 @@ def create_risk_summary_cards(forecast_alerts):
             st.success("🌧️ **Rain Risks:** No alerts")
 
 def main():
+    # Ensure session state is initialized (for cases where authentication cleared it)
+    if "last_update" not in st.session_state:
+        st.session_state.last_update = datetime.now(PAKISTAN_TZ)
+    
     # NEW: Add district alerts sidebar
     create_district_alerts_sidebar()
     
