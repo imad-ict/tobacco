@@ -119,8 +119,8 @@ LOCATIONS = {
     "Buner": {"coords": (34.443, 72.499), "elevation": "730m", "climate": "Semi-arid continental", "crop_type": "FC", "region": "Khyber Pakhtunkhwa"},
     "Mianwali": {"coords": (32.583, 71.550), "elevation": "207m", "climate": "Hot semi-arid", "crop_type": "FC", "region": "Punjab"},
     
-    # Original DAC (Dark Air-Cured) location
-    "Multan": {"coords": (30.473469, 71.486885), "elevation": "122m", "climate": "Hot desert", "crop_type": "DAC", "region": "Punjab"},
+    # Original FC (Flue-Cured) location  
+    "Multan": {"coords": (30.473469, 71.486885), "elevation": "122m", "climate": "Hot desert", "crop_type": "FC", "region": "Punjab"},
     
     # New DAC (Dark Air-Cured) locations
     "Okara": {"coords": (30.808, 73.446), "elevation": "164m", "climate": "Semi-arid", "crop_type": "DAC", "region": "Punjab"},
@@ -222,7 +222,7 @@ def get_current_growth_stage(location=None):
         elif is_in_period(current_month, 3, 4):
             return "Topping/Suckering", "Topping/Suckering - March-April", "✂️", "High"
         elif is_in_period(current_month, 5, 7):
-            return "Harvesting", "Harvesting, Curing and Grading - May-July", "🚜", "Critical"
+            return "Harvesting, Curing and Grading", "Harvesting, Curing and Grading - May-July", "🚜", "Critical"
         elif is_in_period(current_month, 7, 9):
             return "Buying/Processing", "Buying, Harvesting, Curing and Grading - July-September", "📦", "High"
         elif is_in_period(current_month, 8, 11):
@@ -241,7 +241,7 @@ def get_current_growth_stage(location=None):
         elif current_month == 5:
             return "Topping/Suckering", "Topping/Suckering - May", "✂️", "High"
         elif is_in_period(current_month, 6, 7):
-            return "Harvesting", "Harvesting, Curing and Grading - June-July", "🚜", "Critical"
+            return "Harvesting, Curing and Grading", "Harvesting, Curing and Grading - June-July", "🚜", "Critical"
         elif is_in_period(current_month, 7, 9):
             return "Buying/Processing", "Buying, Harvesting, Curing and Grading - July-September", "📦", "High"
         elif is_in_period(current_month, 8, 11):
@@ -269,6 +269,7 @@ def calculate_stage_specific_risk_multiplier(stage_name):
         
         # Harvesting - Research shows critical importance for quality
         "Harvesting": 1.9,            # HIGHEST risk: quality and yield extremely sensitive to weather
+        "Harvesting, Curing and Grading": 1.9,  # HIGHEST risk: quality and yield extremely sensitive to weather
         
         # Processing stages - Research on tobacco quality sensitivity
         "Buying/Processing": 1.4,      # Important for maintaining leaf quality during processing
