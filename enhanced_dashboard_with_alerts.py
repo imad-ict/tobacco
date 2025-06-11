@@ -28,6 +28,56 @@ import plotly.express as px
 from datetime import datetime, timedelta
 import numpy as np
 import pytz
+import hashlib
+
+# Authentication Configuration
+VALID_USERNAME = "imzafinternational"
+VALID_PASSWORD = "imzafinternational1947"
+
+def check_password():
+    """Returns `True` if the user had the correct password."""
+    
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if (st.session_state["username"] == VALID_USERNAME and 
+            st.session_state["password"] == VALID_PASSWORD):
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Don't store password
+            del st.session_state["username"]  # Don't store username
+        else:
+            st.session_state["password_correct"] = False
+
+    # Return True if password is validated
+    if st.session_state.get("password_correct", False):
+        return True
+
+    # Show inputs for username + password
+    st.markdown("""
+    <div style="display: flex; justify-content: center; align-items: center; min-height: 80vh;">
+        <div style="text-align: center; padding: 3rem; border-radius: 15px; box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1); background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); max-width: 450px; width: 100%;">
+            <h1 style="color: #2E7D32; margin-bottom: 1rem; font-size: 2.5rem;">🌾</h1>
+            <h2 style="color: #2E7D32; margin-bottom: 0.5rem;">Pakistan Tobacco Weather Dashboard</h2>
+            <h4 style="color: #555; margin-bottom: 2rem; font-weight: 300;">Risk Assessment System</h4>
+            <div style="border-top: 2px solid #2E7D32; margin: 2rem 0;"></div>
+            <h3 style="color: #666; margin-bottom: 2rem;">🔐 Authentication Required</h3>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        st.text_input("👤 Username", key="username", placeholder="Enter username")
+        st.text_input("🔑 Password", type="password", key="password", placeholder="Enter password")
+        
+        if st.button("🔐 Sign In", use_container_width=True, type="primary"):
+            password_entered()
+        
+        if "password_correct" in st.session_state:
+            if not st.session_state["password_correct"]:
+                st.error("❌ Invalid username or password. Please try again.")
+    
+    return False
 
 # Page configuration
 st.set_page_config(
@@ -3326,4 +3376,9 @@ def create_district_alerts_sidebar():
         st.sidebar.error(f"Error loading district alerts: {str(e)}")
 
 if __name__ == "__main__":
-    main() 
+    # Check authentication before running main app
+    if check_password():
+        main()
+    else:
+        # Authentication page is already shown by check_password()
+        st.stop() 
