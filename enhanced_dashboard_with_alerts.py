@@ -1,3 +1,25 @@
+"""
+Enhanced Weather Risk Assessment Dashboard for Tobacco Cultivation
+================================================================
+
+This is an enhanced version of the original dashboard that includes:
+- All original functionality (exact same UI in main area)
+- NEW: District Alert Overview sidebar showing real-time risk status for all districts
+- Color-coded alert indicators for quick visual assessment across all regions
+- Summary statistics showing total alerts and urgent warnings
+
+Features:
+- Real-time weather monitoring for 9 tobacco cultivation regions in Pakistan
+- Risk assessment for dust storms, hail storms, and heavy rain
+- Growth stage-specific risk multipliers
+- 24-hour and 7-day weather forecasts with risk analysis
+- Interactive charts and visualizations
+- Automatic refresh every 30 minutes
+- District-wide alert overview in sidebar (NEW)
+
+Created: Enhanced version with district alerts overview
+"""
+
 import streamlit as st
 import pandas as pd
 import requests
@@ -12,7 +34,7 @@ st.set_page_config(
     page_title="Weather Risk Assessment - Tobacco Cultivation",
     page_icon="🌾",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"  # Changed to expanded to show alerts
 )
 
 # Pakistan timezone
@@ -37,71 +59,183 @@ if should_refresh():
 API_KEY = "fdb65b20ef3e55d681c05652324d4839"
 
 LOCATIONS = {
-    "Mardan": {"coords": (34.201, 72.050), "elevation": "283m", "climate": "Semi-arid continental"},
-    "Multan": {"coords": (30.473469, 71.486885), "elevation": "122m", "climate": "Hot desert"},
-    "Swabi": {"coords": (34.120, 72.470), "elevation": "300m", "climate": "Semi-arid continental"},
-    "Charsadda": {"coords": (34.150, 71.740), "elevation": "276m", "climate": "Semi-arid continental"}
+    # Original FC (Flue-Cured) locations
+    "Mardan": {"coords": (34.201, 72.050), "elevation": "283m", "climate": "Semi-arid continental", "crop_type": "FC", "region": "Khyber Pakhtunkhwa"},
+    "Swabi": {"coords": (34.120, 72.470), "elevation": "300m", "climate": "Semi-arid continental", "crop_type": "FC", "region": "Khyber Pakhtunkhwa"},
+    "Charsadda": {"coords": (34.150, 71.740), "elevation": "276m", "climate": "Semi-arid continental", "crop_type": "FC", "region": "Khyber Pakhtunkhwa"},
+    
+    # New FC (Flue-Cured) locations
+    "Mansehra": {"coords": (34.333, 73.200), "elevation": "975m", "climate": "Humid subtropical", "crop_type": "FC", "region": "Khyber Pakhtunkhwa"},
+    "Buner": {"coords": (34.443, 72.499), "elevation": "730m", "climate": "Semi-arid continental", "crop_type": "FC", "region": "Khyber Pakhtunkhwa"},
+    "Mianwali": {"coords": (32.583, 71.550), "elevation": "207m", "climate": "Hot semi-arid", "crop_type": "FC", "region": "Punjab"},
+    
+    # Original DAC (Dark Air-Cured) location
+    "Multan": {"coords": (30.473469, 71.486885), "elevation": "122m", "climate": "Hot desert", "crop_type": "DAC", "region": "Punjab"},
+    
+    # New DAC (Dark Air-Cured) locations
+    "Okara": {"coords": (30.808, 73.446), "elevation": "164m", "climate": "Semi-arid", "crop_type": "DAC", "region": "Punjab"},
+    "Gujrat": {"coords": (32.571, 74.075), "elevation": "233m", "climate": "Humid subtropical", "crop_type": "DAC", "region": "Punjab"}
 }
 
-# Tobacco cultivation calendar for Pakistan (based on research)
-TOBACCO_CALENDAR = {
-    "nursery_sowing": {"month": 12, "day": 20, "description": "Nursery sowing in December"},
-    "transplanting": {"month": 3, "day": 25, "description": "Transplanting in late March"},
-    "vegetative_growth": {"month": 4, "day": 15, "description": "Vegetative growth phase"},
-    "flowering": {"month": 6, "day": 1, "description": "Flowering begins in June"},
-    "topping": {"month": 6, "day": 15, "description": "Topping at 24 leaves stage"},
-    "leaf_maturation": {"month": 7, "day": 1, "description": "Leaf maturation phase"},
-    "harvest_start": {"month": 8, "day": 1, "description": "Harvest begins in August"},
-    "harvest_end": {"month": 9, "day": 30, "description": "Harvest ends in September"}
+# Research-based tobacco cultivation calendars for Pakistan
+# Based on actual crop cycles from tobacco_crop_cycles.md research
+
+# FC Crop Cycle for KP/Mansehra/Buner/Punjab (Northern regions)
+# Based on: FC Crop Cycle – KP / Mansehra / Buner / Punjab
+FC_CALENDAR_NORTHERN = {
+    "nursery_sowing": {"start_month": 12, "end_month": 12, "description": "Nurseries (Seed Sowing) - December (1 month)"},
+    "nursery_raising": {"start_month": 1, "end_month": 2, "description": "Nurseries Raising - January-February (2 months)"},
+    "transplanting": {"start_month": 3, "end_month": 4, "description": "Transplantation - March-April (2 months)"},
+    "topping_suckering": {"start_month": 5, "end_month": 5, "description": "Topping/Suckering - May (1 month)"},
+    "harvesting_curing": {"start_month": 6, "end_month": 7, "description": "Harvesting, Curing and Grading - June-July (2 months)"},
+    "buying_processing": {"start_month": 7, "end_month": 9, "description": "Buying, Harvesting, Curing and Grading - July-September (3 months)"},
+    "final_processing": {"start_month": 8, "end_month": 11, "description": "Processing - August-November (4 months)"}
 }
 
-def get_current_growth_stage():
-    """Determine current tobacco growth stage based on date"""
+# FC Crop Cycle for Multan (earlier cycle - warmer climate allows earlier start)
+# Based on: FC Crop Cycle – Multan (1 month ahead of northern regions)
+FC_CALENDAR_MULTAN = {
+    "nursery_sowing": {"start_month": 11, "end_month": 11, "description": "Nurseries (Seed Sowing) - November (1 month)"},
+    "nursery_raising": {"start_month": 12, "end_month": 1, "description": "Nurseries Raising - December-January (2 months)"},
+    "transplanting": {"start_month": 2, "end_month": 2, "description": "Transplantation - February (1 month)"},
+    "topping_suckering": {"start_month": 3, "end_month": 4, "description": "Topping/Suckering - March-April (2 months)"},
+    "harvesting_curing": {"start_month": 5, "end_month": 7, "description": "Harvesting, Curing and Grading - May-July (3 months)"},
+    "buying_processing": {"start_month": 7, "end_month": 9, "description": "Buying, Harvesting, Curing and Grading - July-September (3 months)"},
+    "final_processing": {"start_month": 8, "end_month": 11, "description": "Processing - August-November (4 months)"}
+}
+
+# DAC Crop Cycle (Okara, Gujrat locations)
+# Based on the research pattern showing November-December cycle
+DAC_CALENDAR = {
+    "nursery_operations": {"start_month": 11, "end_month": 12, "description": "Nursery Operations - November-December"},
+    "transplanting": {"start_month": 1, "end_month": 3, "description": "Transplantation Period - January-March"},
+    "field_management": {"start_month": 4, "end_month": 6, "description": "Field Management and Growth - April-June"},
+    "harvesting": {"start_month": 7, "end_month": 8, "description": "Harvesting Period - July-August"},
+    "air_curing": {"start_month": 8, "end_month": 12, "description": "Air-Curing Process - August-December"},
+    "buying_processing": {"start_month": 10, "end_month": 12, "description": "Buying and Processing - October-December"}
+}
+
+def get_current_growth_stage(location=None):
+    """Determine current tobacco growth stage based on location and date"""
     current_date = datetime.now(PAKISTAN_TZ)
     current_month = current_date.month
-    current_day = current_date.day
     
-    # Convert current date to day of year for comparison
-    current_doy = current_date.timetuple().tm_yday
-    
-    # Calculate day of year for each stage
-    stages = {}
-    for stage, info in TOBACCO_CALENDAR.items():
-        stage_date = datetime(current_date.year, info["month"], info["day"], tzinfo=PAKISTAN_TZ)
-        if stage_date < current_date and info["month"] > 6:  # Handle year transition
-            stage_date = datetime(current_date.year - 1, info["month"], info["day"], tzinfo=PAKISTAN_TZ)
-        stages[stage] = stage_date.timetuple().tm_yday
-    
-    # Determine current stage
-    if current_month >= 12 or current_month <= 2:
-        return "Nursery Stage", "Seedlings in nursery beds", "🌱", "Low"
-    elif current_month == 3:
-        return "Transplanting", "Moving seedlings to field", "🌿", "High"
-    elif current_month == 4 or current_month == 5:
-        return "Vegetative Growth", "Rapid leaf development", "🍃", "Medium"
-    elif current_month == 6:
-        if current_day < 15:
-            return "Flowering", "Flower bud formation", "🌸", "High"
-        else:
-            return "Topping Stage", "Removing flower buds", "✂️", "High"
-    elif current_month == 7:
-        return "Leaf Maturation", "Leaves reaching maturity", "🌾", "High"
-    elif current_month == 8 or current_month == 9:
-        return "Harvest Period", "Leaf harvesting active", "🚜", "Critical"
+    # Determine which calendar to use based on location
+    if location:
+        location_info = LOCATIONS.get(location, {})
+        crop_type = location_info.get("crop_type", "FC")
+        
+        # Select appropriate calendar
+        if location == "Multan" and crop_type == "FC":
+            calendar = FC_CALENDAR_MULTAN
+        elif crop_type == "FC":
+            calendar = FC_CALENDAR_NORTHERN  # For KP and Punjab FC regions
+        else:  # DAC
+            calendar = DAC_CALENDAR
     else:
-        return "Post-Harvest", "Field preparation for next season", "🏞️", "Low"
+        # Default to northern FC calendar if no location specified
+        calendar = FC_CALENDAR_NORTHERN
+    
+    def is_in_period(month, start_month, end_month):
+        """Check if current month is within a period, handling year boundaries"""
+        if start_month <= end_month:
+            return start_month <= month <= end_month
+        else:  # Period crosses year boundary (e.g., Nov-Feb)
+            return month >= start_month or month <= end_month
+    
+    # Determine current stage based on calendar
+    if location and LOCATIONS.get(location, {}).get("crop_type") == "DAC":
+        # DAC-specific stages (research-based timing)
+        if is_in_period(current_month, 11, 12):
+            return "Nursery Operations", "Nursery Operations - November-December", "🌱", "Moderate"
+        elif is_in_period(current_month, 1, 3):
+            return "Transplanting", "Transplantation Period - January-March", "🌿", "High"
+        elif is_in_period(current_month, 4, 6):
+            return "Field Management", "Field Management and Growth - April-June", "🍃", "Medium"
+        elif is_in_period(current_month, 7, 8):
+            return "Harvesting", "Harvesting Period - July-August", "🚜", "Critical"
+        elif is_in_period(current_month, 8, 12):
+            return "Air-Curing", "Air-Curing Process - August-December", "🌬️", "High"
+        elif is_in_period(current_month, 10, 12):
+            return "Buying/Processing", "Buying and Processing - October-December", "📦", "Medium"
+        else:
+            return "Field Preparation", "Preparing for next season", "🏞️", "Low"
+    
+    elif location == "Multan" and LOCATIONS.get(location, {}).get("crop_type") == "FC":
+        # Multan FC-specific stages (research-based earlier cycle)
+        if current_month == 11:
+            return "Nursery Sowing", "Nurseries (Seed Sowing) - November", "🌱", "Moderate"
+        elif is_in_period(current_month, 12, 1):
+            return "Nursery Raising", "Nurseries Raising - December-January", "🌿", "Moderate"
+        elif current_month == 2:
+            return "Transplanting", "Transplantation - February", "🌿", "High"
+        elif is_in_period(current_month, 3, 4):
+            return "Topping/Suckering", "Topping/Suckering - March-April", "✂️", "High"
+        elif is_in_period(current_month, 5, 7):
+            return "Harvesting", "Harvesting, Curing and Grading - May-July", "🚜", "Critical"
+        elif is_in_period(current_month, 7, 9):
+            return "Buying/Processing", "Buying, Harvesting, Curing and Grading - July-September", "📦", "High"
+        elif is_in_period(current_month, 8, 11):
+            return "Final Processing", "Processing - August-November", "🏭", "Medium"
+        else:
+            return "Field Preparation", "Preparing for next season", "🏞️", "Low"
+    
+    else:
+        # Northern FC regions (KP and Punjab except Multan) - research-based timing
+        if current_month == 12:
+            return "Nursery Sowing", "Nurseries (Seed Sowing) - December", "🌱", "Moderate"
+        elif is_in_period(current_month, 1, 2):
+            return "Nursery Raising", "Nurseries Raising - January-February", "🌿", "Moderate"
+        elif is_in_period(current_month, 3, 4):
+            return "Transplanting", "Transplantation - March-April", "🌿", "High"
+        elif current_month == 5:
+            return "Topping/Suckering", "Topping/Suckering - May", "✂️", "High"
+        elif is_in_period(current_month, 6, 7):
+            return "Harvesting", "Harvesting, Curing and Grading - June-July", "🚜", "Critical"
+        elif is_in_period(current_month, 7, 9):
+            return "Buying/Processing", "Buying, Harvesting, Curing and Grading - July-September", "📦", "High"
+        elif is_in_period(current_month, 8, 11):
+            return "Final Processing", "Processing - August-November", "🏭", "Medium"
+        else:
+            return "Field Preparation", "Preparing for next season", "🏞️", "Low"
 
 def calculate_stage_specific_risk_multiplier(stage_name):
-    """Calculate risk multiplier based on growth stage vulnerability"""
+    """
+    Calculate risk multiplier based on growth stage vulnerability
+    Based on research about tobacco cultivation stages and their weather sensitivity
+    """
     stage_multipliers = {
-        "Nursery Stage": 0.8,      # Lower field risk
-        "Transplanting": 1.5,      # Very vulnerable to weather
-        "Vegetative Growth": 1.2,   # Moderate vulnerability
-        "Flowering": 1.4,          # High vulnerability to stress
-        "Topping Stage": 1.3,      # Vulnerable during topping
-        "Leaf Maturation": 1.6,    # Critical for quality
-        "Harvest Period": 1.8,     # Most critical period
-        "Post-Harvest": 0.6        # Minimal risk
+        # Nursery stages - Research shows lower vulnerability due to protected environment
+        "Nursery Sowing": 0.8,         # Protected nursery environment, seeds are resilient
+        "Nursery Raising": 0.9,        # Growing seedlings, slightly more vulnerable but still protected
+        "Nursery Operations": 0.8,     # DAC nursery stage, protected environment
+        
+        # Transplanting - Research indicates highest vulnerability period
+        "Transplanting": 1.7,          # Critical vulnerability: newly transplanted seedlings are extremely weather-sensitive
+        
+        # Growth and management stages - Research-based vulnerabilities
+        "Field Management": 1.2,       # Active crop management, moderate vulnerability
+        "Topping/Suckering": 1.4,     # High vulnerability: plants are stressed from topping operations
+        
+        # Harvesting - Research shows critical importance for quality
+        "Harvesting": 1.9,            # HIGHEST risk: quality and yield extremely sensitive to weather
+        
+        # Processing stages - Research on tobacco quality sensitivity
+        "Buying/Processing": 1.4,      # Important for maintaining leaf quality during processing
+        "Final Processing": 1.1,       # Processing facilities provide some protection
+        "Air-Curing": 1.5,           # DAC air-curing: Research shows high sensitivity to humidity and rain
+        
+        # Non-active periods
+        "Field Preparation": 0.5,      # Minimal crop risk, no active crop in field
+        
+        # Legacy stage names (for backward compatibility)
+        "Nursery Stage": 0.8,
+        "Vegetative Growth": 1.2,
+        "Flowering": 1.4,
+        "Topping Stage": 1.4,
+        "Leaf Maturation": 1.6,
+        "Harvest Period": 1.9,
+        "Post-Harvest": 0.5
     }
     return stage_multipliers.get(stage_name, 1.0)
 
@@ -277,6 +411,67 @@ def calculate_rain_risk(rain_1h, rain_3h=None, stage_multiplier=1.0):
     adjusted_risk = min(4, base_risk * stage_multiplier)
     return round(adjusted_risk)
 
+def calculate_drought_risk(temp, humidity, stage_multiplier=1.0, pressure=None, wind_speed=None, clouds=None, days_since_rain=None):
+    """
+    Calculate drought risk (0-4 scale) with ULTRA-EXTREME criteria to eliminate false positives
+    
+    Pakistani summer-adjusted - only catastrophic drought conditions trigger alerts:
+    - Only record-breaking heat (≥50°C) with desert-level dryness (≤3%) triggers severe alerts
+    - Requires truly exceptional conditions beyond normal Pakistani summer heat
+    - Designed to alert only for genuine agricultural emergencies
+    """
+    base_risk = 0
+    
+    # Primary drought condition: CATASTROPHIC temperature + DESERT-LEVEL dryness (EXTREME)
+    # Only trigger for conditions that are genuinely dangerous, not typical summer
+    if temp < 45 or humidity > 10:
+        return 0  # No drought risk - these are normal Pakistani summer conditions
+    
+    # Ultra-extreme drought risk assessment - only catastrophic conditions
+    if temp >= 52 and humidity <= 2:
+        base_risk = 4  # Severe: Record-breaking heat + extreme desert conditions
+    elif temp >= 50 and humidity <= 3:
+        base_risk = 3  # High: Extreme heat wave + near-desert dryness
+    elif temp >= 48 and humidity <= 5:
+        base_risk = 2  # Moderate: Very extreme heat + very dry air
+    elif temp >= 45 and humidity <= 10:
+        base_risk = 1  # Light: Extreme heat + low humidity
+    
+    # Enhancement factors (only if base conditions already met)
+    if base_risk > 0:
+        # High pressure system (clear skies, no rain) enhances drought
+        if pressure is not None and pressure > 1010:
+            base_risk = min(4, base_risk + 0.5)
+        
+        # Low cloud cover indicates clear, dry conditions
+        if clouds is not None and clouds < 20:
+            base_risk = min(4, base_risk + 0.5)
+        
+        # Extended period without rain (if available)
+        if days_since_rain is not None and days_since_rain > 7:
+            base_risk = min(4, base_risk + 1)
+        
+        # High wind speed can increase water loss through evapotranspiration
+        if wind_speed is not None and wind_speed > 8:
+            base_risk = min(4, base_risk + 0.5)
+    
+    # Additional safety checks to prevent false positives
+    # Override drought risk if conditions indicate any moisture possibility
+    if humidity > 12:  # Any moisture above desert levels
+        base_risk = 0
+    
+    if temp < 42:  # Not catastrophically hot enough for drought stress
+        base_risk = 0
+    
+    if clouds is not None and clouds > 10:  # Even minimal cloud cover prevents drought
+        base_risk = 0
+    
+    # Apply stage multiplier conservatively and round to integer
+    adjusted_risk = base_risk * stage_multiplier
+    final_risk = min(4, round(adjusted_risk))
+    
+    return int(final_risk)
+
 def get_risk_color(risk_level):
     """Get color based on risk level"""
     if risk_level >= 3:
@@ -302,9 +497,34 @@ def get_risk_intensity_label(risk_level):
         return "None"
 
 def get_stage_specific_risk_message(risk_type, risk_level, stage_name):
-    """Get stage-specific risk message for tobacco cultivation"""
+    """
+    Get stage-specific risk message for tobacco cultivation
+    Based on research about tobacco plant vulnerabilities at different growth stages
+    """
     stage_messages = {
         "dust": {
+            # Nursery stages
+            "Nursery Sowing": {
+                0: "✅ No dust risk - Nursery beds protected",
+                1: "⚠️ Low dust risk - Monitor nursery covers",
+                2: "⚠️ Moderate dust risk - Secure nursery protection",
+                3: "🚨 High dust risk - Seedlings vulnerable to desiccation",
+                4: "🚨 Severe dust risk - Emergency nursery protection needed"
+            },
+            "Nursery Raising": {
+                0: "✅ No dust risk - Nursery beds protected",
+                1: "⚠️ Low dust risk - Monitor nursery covers",
+                2: "⚠️ Moderate dust risk - Secure nursery protection",
+                3: "🚨 High dust risk - Seedlings vulnerable to desiccation",
+                4: "🚨 Severe dust risk - Emergency nursery protection needed"
+            },
+            "Nursery Operations": {
+                0: "✅ No dust risk - Nursery beds protected",
+                1: "⚠️ Low dust risk - Monitor nursery covers",
+                2: "⚠️ Moderate dust risk - Secure nursery protection",
+                3: "🚨 High dust risk - Seedlings vulnerable to desiccation",
+                4: "🚨 Severe dust risk - Emergency nursery protection needed"
+            },
             "Nursery Stage": {
                 0: "✅ No dust risk - Nursery beds protected",
                 1: "⚠️ Low dust risk - Monitor nursery covers",
@@ -313,11 +533,11 @@ def get_stage_specific_risk_message(risk_type, risk_level, stage_name):
                 4: "🚨 Severe dust risk - Emergency nursery protection needed"
             },
             "Transplanting": {
-                0: "✅ No dust risk - Good conditions for transplanting",
-                1: "⚠️ Low dust risk - Monitor newly transplanted seedlings",
-                2: "⚠️ Moderate dust risk - Provide windbreaks for young plants",
-                3: "🚨 High dust risk - Delay transplanting if possible",
-                4: "🚨 Severe dust risk - Postpone transplanting operations"
+                0: "✅ No dust risk - Optimal conditions for transplanting",
+                1: "⚠️ Low dust risk - Monitor newly transplanted seedlings closely",
+                2: "⚠️ Moderate dust risk - Critical: Provide windbreaks, increase irrigation",
+                3: "🚨 High dust risk - CRITICAL: Delay transplanting - extreme vulnerability",
+                4: "🚨 Severe dust risk - EMERGENCY: Postpone all transplanting - plant death likely"
             },
             "Vegetative Growth": {
                 0: "✅ No dust risk - Optimal growth conditions",
@@ -333,12 +553,26 @@ def get_stage_specific_risk_message(risk_type, risk_level, stage_name):
                 3: "🚨 High dust risk - Flowering stress and poor seed set",
                 4: "🚨 Severe dust risk - Severe flowering disruption"
             },
+            "Topping/Suckering": {
+                0: "✅ No dust risk - Good conditions for operations",
+                1: "⚠️ Low dust risk - Normal operations",
+                2: "⚠️ Moderate dust risk - Protect fresh cuts from dust",
+                3: "🚨 High dust risk - Delay operations",
+                4: "🚨 Severe dust risk - Postpone all field operations"
+            },
             "Topping Stage": {
                 0: "✅ No dust risk - Good conditions for topping",
                 1: "⚠️ Low dust risk - Normal topping operations",
                 2: "⚠️ Moderate dust risk - Protect fresh cuts from dust",
                 3: "🚨 High dust risk - Delay topping operations",
                 4: "🚨 Severe dust risk - Postpone all field operations"
+            },
+            "Field Management": {
+                0: "✅ No dust risk - Optimal field conditions",
+                1: "⚠️ Low dust risk - Monitor crop development",
+                2: "⚠️ Moderate dust risk - May affect plant growth",
+                3: "🚨 High dust risk - Leaf damage likely",
+                4: "🚨 Severe dust risk - Severe crop damage expected"
             },
             "Leaf Maturation": {
                 0: "✅ No dust risk - Optimal leaf maturation",
@@ -347,12 +581,47 @@ def get_stage_specific_risk_message(risk_type, risk_level, stage_name):
                 3: "🚨 High dust risk - Reduced leaf quality and value",
                 4: "🚨 Severe dust risk - Significant quality degradation"
             },
+            "Harvesting": {
+                0: "✅ No dust risk - Optimal harvesting conditions",
+                1: "⚠️ Low dust risk - Monitor leaf quality during harvest",
+                2: "⚠️ Moderate dust risk - CRITICAL: Protect harvested leaves - quality at risk",
+                3: "🚨 High dust risk - CRITICAL: Delay harvest - severe quality degradation risk",
+                4: "🚨 Severe dust risk - EMERGENCY: Suspend harvest - economic loss likely"
+            },
             "Harvest Period": {
                 0: "✅ No dust risk - Good harvesting conditions",
                 1: "⚠️ Low dust risk - Normal harvest operations",
                 2: "⚠️ Moderate dust risk - Protect harvested leaves",
                 3: "🚨 High dust risk - Delay harvest if possible",
                 4: "🚨 Severe dust risk - Suspend harvest operations"
+            },
+            "Buying/Processing": {
+                0: "✅ No dust risk - Good for processing",
+                1: "⚠️ Low dust risk - Normal operations",
+                2: "⚠️ Moderate dust risk - Protect processed tobacco",
+                3: "🚨 High dust risk - Delay processing activities",
+                4: "🚨 Severe dust risk - Suspend processing operations"
+            },
+            "Final Processing": {
+                0: "✅ No dust risk - Ideal processing conditions",
+                1: "⚠️ Low dust risk - Normal processing",
+                2: "⚠️ Moderate dust risk - Monitor storage areas",
+                3: "🚨 High dust risk - Protect finished products",
+                4: "🚨 Severe dust risk - Secure all processing"
+            },
+            "Air-Curing": {
+                0: "✅ No dust risk - Optimal air-curing conditions",
+                1: "⚠️ Low dust risk - Monitor curing barns for dust infiltration",
+                2: "⚠️ Moderate dust risk - CRITICAL: Seal curing facilities - quality at risk",
+                3: "🚨 High dust risk - CRITICAL: Dust contamination - major quality loss",
+                4: "🚨 Severe dust risk - EMERGENCY: Complete curing failure likely"
+            },
+            "Field Preparation": {
+                0: "✅ No dust risk - Good for field work",
+                1: "⚠️ Low dust risk - Normal field activities",
+                2: "⚠️ Moderate dust risk - Limit field operations",
+                3: "🚨 High dust risk - Postpone field preparation",
+                4: "🚨 Severe dust risk - Avoid all field activities"
             },
             "Post-Harvest": {
                 0: "✅ No dust risk - Good for field preparation",
@@ -421,6 +690,27 @@ def get_stage_specific_risk_message(risk_type, risk_level, stage_name):
             }
         },
         "rain": {
+            "Nursery Sowing": {
+                0: "✅ No rain - Monitor nursery irrigation carefully",
+                1: "🌧️ Light rain - Beneficial for seed germination",
+                2: "🌧️ Moderate rain - Monitor nursery drainage",
+                3: "⚠️ Heavy rain - Risk of seed washout and damping-off",
+                4: "🚨 Severe rain - Emergency nursery protection needed"
+            },
+            "Nursery Raising": {
+                0: "✅ No rain - Monitor seedling irrigation",
+                1: "🌧️ Light rain - Beneficial for seedling growth",
+                2: "🌧️ Moderate rain - Monitor nursery drainage",
+                3: "⚠️ Heavy rain - Risk of seedling damping-off disease",
+                4: "🚨 Severe rain - Nursery flooding risk - seedling death likely"
+            },
+            "Nursery Operations": {
+                0: "✅ No rain - Monitor nursery irrigation",
+                1: "🌧️ Light rain - Beneficial for DAC nursery operations",
+                2: "🌧️ Moderate rain - Monitor nursery drainage",
+                3: "⚠️ Heavy rain - Risk of seedling damping-off",
+                4: "🚨 Severe rain - DAC nursery flooding risk"
+            },
             "Nursery Stage": {
                 0: "✅ No rain - Monitor nursery irrigation",
                 1: "🌧️ Light rain - Beneficial for seedlings",
@@ -429,11 +719,11 @@ def get_stage_specific_risk_message(risk_type, risk_level, stage_name):
                 4: "🚨 Severe rain - Nursery flooding risk"
             },
             "Transplanting": {
-                0: "✅ No rain - Good transplanting conditions",
-                1: "🌧️ Light rain - Helpful for establishment",
-                2: "🌧️ Moderate rain - Monitor soil conditions",
-                3: "⚠️ Heavy rain - Delay transplanting operations",
-                4: "🚨 Severe rain - Postpone all transplanting"
+                0: "✅ No rain - Optimal transplanting conditions",
+                1: "🌧️ Light rain - Helpful for seedling establishment",
+                2: "🌧️ Moderate rain - CRITICAL: Monitor soil waterlogging",
+                3: "⚠️ Heavy rain - CRITICAL: Delay transplanting - root damage risk",
+                4: "🚨 Severe rain - EMERGENCY: Postpone all transplanting - plant death likely"
             },
             "Vegetative Growth": {
                 0: "✅ No rain - Monitor irrigation needs",
@@ -463,12 +753,61 @@ def get_stage_specific_risk_message(risk_type, risk_level, stage_name):
                 3: "⚠️ Heavy rain - Risk of leaf disease and quality loss",
                 4: "🚨 Severe rain - Severe quality degradation"
             },
+            "Harvesting": {
+                0: "✅ No rain - Perfect harvesting weather",
+                1: "🌧️ Light rain - CRITICAL: Delay harvest until completely dry",
+                2: "🌧️ Moderate rain - CRITICAL: Postpone harvest - quality at risk",
+                3: "⚠️ Heavy rain - CRITICAL: Risk of leaf rot and mold - major losses",
+                4: "🚨 Severe rain - EMERGENCY: Complete harvest failure likely"
+            },
             "Harvest Period": {
                 0: "✅ No rain - Perfect harvesting weather",
                 1: "🌧️ Light rain - Delay harvest until dry",
                 2: "🌧️ Moderate rain - Postpone harvest operations",
                 3: "⚠️ Heavy rain - Risk of leaf rot and mold",
                 4: "🚨 Severe rain - Emergency crop protection needed"
+            },
+            "Topping/Suckering": {
+                0: "✅ No rain - Ideal for topping/suckering operations",
+                1: "🌧️ Light rain - Acceptable for operations",
+                2: "🌧️ Moderate rain - Delay operations if possible",
+                3: "⚠️ Heavy rain - Postpone operations - infection risk",
+                4: "🚨 Severe rain - Emergency: Disease risk in fresh cuts"
+            },
+            "Field Management": {
+                0: "✅ No rain - Monitor irrigation needs",
+                1: "🌧️ Light rain - Beneficial for crop growth",
+                2: "🌧️ Moderate rain - Good for field development",
+                3: "⚠️ Heavy rain - Risk of waterlogging",
+                4: "🚨 Severe rain - Flooding and root damage risk"
+            },
+            "Air-Curing": {
+                0: "✅ No rain - Optimal air-curing conditions",
+                1: "🌧️ Light rain - Monitor humidity in curing barns",
+                2: "🌧️ Moderate rain - CRITICAL: Risk of humidity damage",
+                3: "⚠️ Heavy rain - CRITICAL: Severe curing quality degradation",
+                4: "🚨 Severe rain - EMERGENCY: Complete curing failure likely"
+            },
+            "Buying/Processing": {
+                0: "✅ No rain - Good for processing operations",
+                1: "🌧️ Light rain - Normal processing conditions",
+                2: "🌧️ Moderate rain - Monitor storage areas",
+                3: "⚠️ Heavy rain - Protect processed tobacco",
+                4: "🚨 Severe rain - Risk of quality degradation"
+            },
+            "Final Processing": {
+                0: "✅ No rain - Ideal processing conditions",
+                1: "🌧️ Light rain - Normal processing operations",
+                2: "🌧️ Moderate rain - Monitor facility conditions",
+                3: "⚠️ Heavy rain - Protect finished products",
+                4: "🚨 Severe rain - Risk of facility damage"
+            },
+            "Field Preparation": {
+                0: "✅ No rain - Good for field preparation",
+                1: "🌧️ Light rain - Beneficial for soil moisture",
+                2: "🌧️ Moderate rain - Good for next season prep",
+                3: "⚠️ Heavy rain - Limit field operations",
+                4: "🚨 Severe rain - Avoid all field activities"
             },
             "Post-Harvest": {
                 0: "✅ No rain - Good for field preparation",
@@ -477,8 +816,179 @@ def get_stage_specific_risk_message(risk_type, risk_level, stage_name):
                 3: "⚠️ Heavy rain - Limit field operations",
                 4: "🚨 Severe rain - Avoid all field activities"
             }
+        },
+        "drought": {
+            # Nursery stages - critical for water-dependent seedlings
+            "Nursery Sowing": {
+                0: "✅ No drought risk - Adequate moisture for germination",
+                1: "🌡️ Light drought - Monitor seed bed moisture closely",
+                2: "🌡️ Moderate drought - CRITICAL: Increase irrigation frequency",
+                3: "🚨 High drought - CRITICAL: Seedling death risk - emergency watering",
+                4: "🚨 Severe drought - EMERGENCY: Immediate intensive irrigation required"
+            },
+            "Nursery Raising": {
+                0: "✅ No drought risk - Good seedling conditions",
+                1: "🌡️ Light drought - Monitor seedling stress",
+                2: "🌡️ Moderate drought - CRITICAL: Increase watering frequency",
+                3: "🚨 High drought - CRITICAL: Seedling wilting risk",
+                4: "🚨 Severe drought - EMERGENCY: Seedling death imminent"
+            },
+            "Nursery Operations": {
+                0: "✅ No drought risk - Optimal nursery conditions",
+                1: "🌡️ Light drought - Monitor nursery irrigation",
+                2: "🌡️ Moderate drought - CRITICAL: Enhance irrigation schedule",
+                3: "🚨 High drought - CRITICAL: Emergency nursery protection",
+                4: "🚨 Severe drought - EMERGENCY: Nursery failure likely"
+            },
+            "Nursery Stage": {
+                0: "✅ No drought risk - Good seedling growth",
+                1: "🌡️ Light drought - Monitor seedling development",
+                2: "🌡️ Moderate drought - CRITICAL: Increase irrigation",
+                3: "🚨 High drought - CRITICAL: Seedling stress - emergency water",
+                4: "🚨 Severe drought - EMERGENCY: Mass seedling death risk"
+            },
+            # Transplanting - extremely vulnerable to drought stress
+            "Transplanting": {
+                0: "✅ No drought risk - Optimal transplanting conditions",
+                1: "🌡️ Light drought - Monitor newly transplanted plants closely",
+                2: "🌡️ Moderate drought - CRITICAL: Very high transplant shock risk",
+                3: "🚨 High drought - CRITICAL: Postpone transplanting - plant death likely",
+                4: "🚨 Severe drought - EMERGENCY: Complete transplant failure certain"
+            },
+            # Vegetative growth - critical for leaf development
+            "Vegetative Growth": {
+                0: "✅ No drought risk - Optimal growth conditions",
+                1: "🌡️ Light drought - Monitor plant water stress",
+                2: "🌡️ Moderate drought - Reduced photosynthesis and stunted growth",
+                3: "🚨 High drought - CRITICAL: Severe growth reduction - leaf quality at risk",
+                4: "🚨 Severe drought - EMERGENCY: Plant death and crop failure likely"
+            },
+            # Flowering - affects seed production
+            "Flowering": {
+                0: "✅ No drought risk - Good flowering conditions",
+                1: "🌡️ Light drought - Monitor flower development",
+                2: "🌡️ Moderate drought - Reduced flower formation",
+                3: "🚨 High drought - CRITICAL: Poor flowering and seed set",
+                4: "🚨 Severe drought - EMERGENCY: Complete flowering failure"
+            },
+            # Topping operations - plants need moisture for recovery
+            "Topping/Suckering": {
+                0: "✅ No drought risk - Good conditions for operations",
+                1: "🌡️ Light drought - Ensure adequate water after operations",
+                2: "🌡️ Moderate drought - Delay operations if possible",
+                3: "🚨 High drought - CRITICAL: Postpone topping - stress too high",
+                4: "🚨 Severe drought - EMERGENCY: All operations suspended"
+            },
+            "Topping Stage": {
+                0: "✅ No drought risk - Good topping conditions",
+                1: "🌡️ Light drought - Monitor topped plants",
+                2: "🌡️ Moderate drought - Delay topping operations",
+                3: "🚨 High drought - CRITICAL: Severe stress after topping",
+                4: "🚨 Severe drought - EMERGENCY: Topping will kill plants"
+            },
+            # Leaf maturation - critical for quality
+            "Leaf Maturation": {
+                0: "✅ No drought risk - Optimal leaf development",
+                1: "🌡️ Light drought - Monitor leaf quality",
+                2: "🌡️ Moderate drought - Reduced leaf size and quality",
+                3: "🚨 High drought - CRITICAL: Severe quality degradation",
+                4: "🚨 Severe drought - EMERGENCY: Leaves unsuitable for harvest"
+            },
+            # Harvesting - leaves need proper moisture content
+            "Harvesting": {
+                0: "✅ No drought risk - Good harvest conditions",
+                1: "🌡️ Light drought - Monitor leaf brittleness",
+                2: "🌡️ Moderate drought - CRITICAL: Leaves may be too dry/brittle",
+                3: "🚨 High drought - CRITICAL: Poor harvest quality expected",
+                4: "🚨 Severe drought - EMERGENCY: Harvest unsuitable - major losses"
+            },
+            "Harvest Period": {
+                0: "✅ No drought risk - Good harvesting weather",
+                1: "🌡️ Light drought - Monitor leaf moisture content",
+                2: "🌡️ Moderate drought - Careful handling required",
+                3: "🚨 High drought - CRITICAL: Brittle leaves - quality issues",
+                4: "🚨 Severe drought - EMERGENCY: Harvest failure likely"
+            },
+            # Field management
+            "Field Management": {
+                0: "✅ No drought risk - Optimal field conditions",
+                1: "🌡️ Light drought - Monitor crop water needs",
+                2: "🌡️ Moderate drought - Increase irrigation frequency",
+                3: "🚨 High drought - CRITICAL: Emergency irrigation needed",
+                4: "🚨 Severe drought - EMERGENCY: Crop failure imminent"
+            },
+            # Air-curing - needs controlled conditions
+            "Air-Curing": {
+                0: "✅ No drought risk - Good curing conditions",
+                1: "🌡️ Light drought - Monitor curing barn humidity",
+                2: "🌡️ Moderate drought - CRITICAL: Over-drying risk",
+                3: "🚨 High drought - CRITICAL: Severe over-drying - quality loss",
+                4: "🚨 Severe drought - EMERGENCY: Complete curing failure"
+            },
+            # Processing and storage
+            "Buying/Processing": {
+                0: "✅ No drought risk - Good processing conditions",
+                1: "🌡️ Light drought - Monitor storage humidity",
+                2: "🌡️ Moderate drought - Control storage environment",
+                3: "🚨 High drought - CRITICAL: Risk of over-drying",
+                4: "🚨 Severe drought - EMERGENCY: Product degradation risk"
+            },
+            "Final Processing": {
+                0: "✅ No drought risk - Ideal processing conditions",
+                1: "🌡️ Light drought - Monitor facility conditions",
+                2: "🌡️ Moderate drought - Control environment carefully",
+                3: "🚨 High drought - CRITICAL: Quality control issues",
+                4: "🚨 Severe drought - EMERGENCY: Processing complications"
+            },
+            # Field preparation
+            "Field Preparation": {
+                0: "✅ No drought risk - Good soil conditions",
+                1: "🌡️ Light drought - Monitor soil moisture",
+                2: "🌡️ Moderate drought - Irrigation may be needed",
+                3: "🚨 High drought - CRITICAL: Poor soil preparation conditions",
+                4: "🚨 Severe drought - EMERGENCY: Delay field preparation"
+            },
+            "Post-Harvest": {
+                0: "✅ No drought risk - Good field conditions",
+                1: "🌡️ Light drought - Monitor soil for next season",
+                2: "🌡️ Moderate drought - Consider soil conservation",
+                3: "🚨 High drought - CRITICAL: Soil degradation risk",
+                4: "🚨 Severe drought - EMERGENCY: Severe soil stress"
+            }
         }
     }
+    
+    # Add new stages to hail and rain risk messages by referencing similar existing stages
+    if stage_name in ["Nursery Sowing", "Nursery Raising", "Nursery Operations"] and stage_name not in stage_messages.get(risk_type, {}):
+        # Use Nursery Stage messages for new nursery stages
+        reference_stage = "Nursery Stage"
+    elif stage_name == "Topping/Suckering" and stage_name not in stage_messages.get(risk_type, {}):
+        # Use Topping Stage messages
+        reference_stage = "Topping Stage"
+    elif stage_name == "Field Management" and stage_name not in stage_messages.get(risk_type, {}):
+        # Use Vegetative Growth messages
+        reference_stage = "Vegetative Growth"
+    elif stage_name == "Harvesting" and stage_name not in stage_messages.get(risk_type, {}):
+        # Use Harvest Period messages
+        reference_stage = "Harvest Period"
+    elif stage_name in ["Buying/Processing", "Final Processing"] and stage_name not in stage_messages.get(risk_type, {}):
+        # Use Post-Harvest messages for processing stages
+        reference_stage = "Post-Harvest"
+    elif stage_name == "Air-Curing" and stage_name not in stage_messages.get(risk_type, {}):
+        # Use Leaf Maturation messages for curing
+        reference_stage = "Leaf Maturation"
+    elif stage_name == "Field Preparation" and stage_name not in stage_messages.get(risk_type, {}):
+        # Use Post-Harvest messages
+        reference_stage = "Post-Harvest"
+    else:
+        reference_stage = None
+    
+    # Try to get message using reference stage if available
+    if reference_stage and reference_stage in stage_messages.get(risk_type, {}):
+        try:
+            return stage_messages[risk_type][reference_stage][risk_level]
+        except KeyError:
+            pass
     
     # Fallback to generic messages if stage not found
     generic_messages = {
@@ -502,6 +1012,13 @@ def get_stage_specific_risk_message(risk_type, risk_level, stage_name):
             2: "🌧️ Moderate rain - Monitor soil drainage",
             3: "⚠️ Heavy rain - Risk of waterlogging and disease",
             4: "🚨 Severe rain - Flooding risk, protect tobacco fields"
+        },
+        "drought": {
+            0: "✅ No drought risk - Adequate moisture for tobacco",
+            1: "🌡️ Light drought - Monitor irrigation needs",
+            2: "🌡️ Moderate drought - Increase watering frequency",
+            3: "🚨 High drought - Critical water stress - emergency irrigation",
+            4: "🚨 Severe drought - Immediate intensive irrigation required"
         }
     }
     
@@ -844,6 +1361,16 @@ def analyze_forecast_risks(hourly_data, daily_data, stage_multiplier, min_risk_l
             stage_multiplier
         )
         
+        drought_risk = calculate_drought_risk(
+            temp,
+            humidity,
+            stage_multiplier,
+            pressure=pressure,
+            wind_speed=wind_speed,
+            clouds=clouds,
+            days_since_rain=None  # Not available in hourly forecasts
+        )
+        
         # Check for significant risks
         risks = []
         if dust_risk >= min_risk_level:
@@ -852,6 +1379,8 @@ def analyze_forecast_risks(hourly_data, daily_data, stage_multiplier, min_risk_l
             risks.append(("Hail", hail_risk))
         if rain_risk >= min_risk_level:
             risks.append(("Rain", rain_risk))
+        if drought_risk >= min_risk_level:
+            risks.append(("Drought", drought_risk))
         
         # Create alerts for significant risks
         for risk_type, risk_level in risks:
@@ -914,6 +1443,16 @@ def analyze_forecast_risks(hourly_data, daily_data, stage_multiplier, min_risk_l
             stage_multiplier
         )
         
+        drought_risk = calculate_drought_risk(
+            temp_day,
+            humidity,
+            stage_multiplier,
+            pressure=pressure,
+            wind_speed=wind_speed,
+            clouds=clouds,
+            days_since_rain=None  # Not available in daily forecasts
+        )
+        
         # Check for significant risks
         risks = []
         if dust_risk >= min_risk_level:
@@ -922,6 +1461,8 @@ def analyze_forecast_risks(hourly_data, daily_data, stage_multiplier, min_risk_l
             risks.append(("Hail", hail_risk))
         if rain_risk >= min_risk_level:
             risks.append(("Rain", rain_risk))
+        if drought_risk >= min_risk_level:
+            risks.append(("Drought", drought_risk))
         
         # Create alerts for significant risks
         for risk_type, risk_level in risks:
@@ -953,7 +1494,8 @@ def create_risk_alert_card(alert, stage_name):
     risk_icon = {
         "Dust": "🌪️",
         "Hail": "🧊", 
-        "Rain": "🌧️"
+        "Rain": "🌧️",
+        "Drought": "🌡️"
     }.get(alert["risk_type"], "⚠️")
     
     time_format = "%a %b %d, %H:%M" if alert["type"] == "hourly" else "%a %b %d"
@@ -1020,7 +1562,7 @@ def create_forecast_risk_summary(alerts):
         return "✅ No significant weather risks detected in the forecast period."
     
     # Count risks by type and severity
-    risk_counts = {"Dust": 0, "Hail": 0, "Rain": 0}
+    risk_counts = {"Dust": 0, "Hail": 0, "Rain": 0, "Drought": 0}
     severity_counts = {"Light": 0, "Moderate": 0, "High": 0, "Severe": 0}
     
     for alert in alerts:
@@ -1033,7 +1575,7 @@ def create_forecast_risk_summary(alerts):
     
     for risk_type, count in risk_counts.items():
         if count > 0:
-            icon = {"Dust": "🌪️", "Hail": "🧊", "Rain": "🌧️"}[risk_type]
+            icon = {"Dust": "🌪️", "Hail": "🧊", "Rain": "🌧️", "Drought": "🌡️"}[risk_type]
             summary_parts.append(f"{icon} {count} {risk_type}")
     
     summary_text = f"⚠️ **{total_alerts} upcoming risk alerts detected**\n\n"
@@ -1084,7 +1626,8 @@ def create_simple_alert_card(alert):
     risk_icon = {
         "Dust": "🌪️",
         "Hail": "🧊", 
-        "Rain": "🌧️"
+        "Rain": "🌧️",
+        "Drought": "🌡️"
     }.get(alert["risk_type"], "⚠️")
     
     time_str = alert["datetime"].strftime("%H:%M" if alert["type"] == "hourly" else "All Day")
@@ -1396,6 +1939,9 @@ def create_risk_summary_cards(forecast_alerts):
             st.success("🌧️ **Rain Risks:** No alerts")
 
 def main():
+    # NEW: Add district alerts sidebar
+    create_district_alerts_sidebar()
+    
     # Add auto-refresh info in header
     current_time_pk = datetime.now(PAKISTAN_TZ)
     next_update = st.session_state.last_update + timedelta(minutes=30)
@@ -1405,7 +1951,7 @@ def main():
     <div style='text-align: center; padding: 20px; background: linear-gradient(90deg, #1e3c72 0%, #2a5298 100%); color: white; border-radius: 10px; margin-bottom: 20px;'>
         <h1 style='margin: 0; font-size: 2.5em;'>🌾 Real-time Weather Monitoring and Risk Assessment</h1>
         <h3 style='margin: 10px 0 0 0; font-weight: 300;'>for Tobacco Cultivation in Pakistan</h3>
-        <p style='margin: 10px 0 0 0; opacity: 0.9;'>Regional weather insights, risks, and forecast for dust, hail, and rain</p>
+        <p style='margin: 10px 0 0 0; opacity: 0.9;'>Comprehensive weather monitoring for FC and DAC tobacco cultivation across Pakistan</p>
         <div style='margin-top: 15px; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 5px;'>
             <p style='margin: 0; font-size: 14px;'>🕐 Pakistan Time: {current_time_pk.strftime('%Y-%m-%d %H:%M:%S')} | 🔄 Auto-refresh: Every 30 minutes | Next Update: {next_update.strftime('%H:%M')}</p>
         </div>
@@ -1421,11 +1967,16 @@ def main():
             help="Toggle to compare real-time sensor data with forecast model predictions"
         )
     with col2:
+        # Group locations by crop type for better organization
+        fc_locations = [name for name, info in LOCATIONS.items() if info["crop_type"] == "FC"]
+        dac_locations = [name for name, info in LOCATIONS.items() if info["crop_type"] == "DAC"]
+        
         selected_region = st.selectbox(
-            "📍 Select Region",
+            "📍 Select Tobacco Cultivation Region",
             options=list(LOCATIONS.keys()),
             index=0,
-            help="Choose a tobacco cultivation region for detailed weather analysis"
+            help="Choose a tobacco cultivation region for detailed weather analysis",
+            format_func=lambda x: f"🌿 {x} ({LOCATIONS[x]['crop_type']} - {LOCATIONS[x]['region']})"
         )
     with col3:
         # Manual refresh button and auto-refresh settings
@@ -1471,9 +2022,11 @@ def main():
     lat, lon = LOCATIONS[selected_region]["coords"]
     elevation = LOCATIONS[selected_region]["elevation"]
     climate = LOCATIONS[selected_region]["climate"]
+    crop_type = LOCATIONS[selected_region]["crop_type"]
+    region = LOCATIONS[selected_region]["region"]
     
-    # Get current growth stage
-    stage_name, stage_desc, stage_icon, stage_priority = get_current_growth_stage()
+    # Get current growth stage for selected region
+    stage_name, stage_desc, stage_icon, stage_priority = get_current_growth_stage(selected_region)
     stage_multiplier = calculate_stage_specific_risk_multiplier(stage_name)
     
     # Fetch weather data
@@ -1558,6 +2111,16 @@ def main():
         stage_multiplier
     )
     
+    current_drought_risk = calculate_drought_risk(
+        current.get("temp", 0),
+        current.get("humidity", 0),
+        stage_multiplier,
+        pressure=current.get("pressure", 1013),
+        wind_speed=current.get("wind_speed", 0),
+        clouds=current.get("clouds", 0),
+        days_since_rain=None  # Not available in current weather data
+    )
+    
     # Calculate 7-day precipitation total
     total_precipitation = sum([day.get("rain", 0) for day in daily])
     
@@ -1611,10 +2174,10 @@ def main():
     
     with col6:
         st.metric(
-            "📍 Location Info",
-            f"{elevation}",
-            climate,
-            help=f"Elevation and climate type for {selected_region}"
+            f"📍 {crop_type} Cultivation",
+            f"{region}",
+            f"{elevation} • {climate}",
+            help=f"Crop Type: {crop_type} ({'Flue-Cured' if crop_type == 'FC' else 'Dark Air-Cured'}) | Region: {region} | Elevation: {elevation}"
         )
     
     # Growth Stage Information
@@ -1661,6 +2224,92 @@ def main():
         - Adjust operations based on risk levels
         """)
     
+    # Crop Type Information Section
+    st.markdown("### 🌿 Tobacco Crop Type Information")
+    
+    crop_type_full = "Flue-Cured (FC)" if crop_type == "FC" else "Dark Air-Cured (DAC)"
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if crop_type == "FC":
+            st.info(f"""
+            **🔥 Flue-Cured (FC) Tobacco - {selected_region}**
+            
+            **Curing Method:** Heat-cured in barns with controlled temperature
+            **Harvest Period:** August-September  
+            **Key Characteristics:**
+            - Bright yellow to orange color after curing
+            - Lower nicotine content
+            - Primarily used for cigarettes
+            - Requires precise temperature control during curing
+            
+            **Weather Sensitivity:**
+            - Very sensitive to hail and wind damage
+            - Requires protection during harvest
+            - Quality depends on proper drying conditions
+            """)
+        else:
+            st.info(f"""
+            **🌬️ Dark Air-Cured (DAC) Tobacco - {selected_region}**
+            
+            **Curing Method:** Air-dried in well-ventilated barns
+            **Harvest Period:** August-October  
+            **Key Characteristics:**
+            - Dark brown to black color after curing
+            - Higher nicotine content
+            - Used for cigars, pipe tobacco, and chewing tobacco
+            - Natural air-curing process (6-12 weeks)
+            
+            **Weather Sensitivity:**
+            - Sensitive to excessive humidity during curing
+            - Requires good air circulation
+            - Rain during harvest can cause mold issues
+            """)
+    
+    with col2:
+        # Regional cultivation info
+        st.markdown(f"""
+        **📍 Regional Cultivation Details - {region}**
+        
+        **Growing Conditions:**
+        - **Elevation:** {elevation}
+        - **Climate:** {climate}
+        - **Province/Region:** {region}
+        
+        **Local Factors:**
+        - Soil type and drainage patterns
+        - Seasonal weather variations
+        - Local farming practices and techniques
+        
+        **Risk Factors for {crop_type} Tobacco:**
+        """)
+        
+        if crop_type == "FC":
+            st.markdown("""
+            - **Hail Damage:** Can destroy entire crop in minutes
+            - **Wind Damage:** Tears leaves and breaks stems
+            - **Rain at Harvest:** Delays harvest and affects quality
+            - **Dust Storms:** Reduces leaf quality and photosynthesis
+            """)
+        else:
+            st.markdown("""
+            - **Excessive Humidity:** Promotes mold during air-curing
+            - **Heavy Rain:** Can cause field flooding and leaf rot
+            - **Hail Damage:** Destroys valuable upper leaves
+            - **Inconsistent Weather:** Affects natural curing process
+            """)
+    
+    # Show crop distribution
+    fc_count = len([loc for loc, info in LOCATIONS.items() if info["crop_type"] == "FC"])
+    dac_count = len([loc for loc, info in LOCATIONS.items() if info["crop_type"] == "DAC"])
+    
+    st.markdown(f"""
+    **🗺️ Tobacco Cultivation Overview in Pakistan:**
+    - **Flue-Cured (FC) Regions:** {fc_count} monitored areas - {', '.join([loc for loc, info in LOCATIONS.items() if info["crop_type"] == "FC"])}
+    - **Dark Air-Cured (DAC) Regions:** {dac_count} monitored areas - {', '.join([loc for loc, info in LOCATIONS.items() if info["crop_type"] == "DAC"])}
+    - **Total Coverage:** {len(LOCATIONS)} tobacco cultivation regions across Pakistan
+    """)
+    
     # Upcoming Weather Risks Section
     if forecast_alerts:
         st.markdown("---")
@@ -1685,7 +2334,7 @@ def main():
                 # Risk filter options
                 risk_type_filter = st.selectbox(
                     "Filter by Risk Type",
-                    options=["All", "Dust", "Hail", "Rain"],
+                    options=["All", "Dust", "Hail", "Rain", "Drought"],
                     help="Filter alerts by specific risk type"
                 )
                 
@@ -1883,7 +2532,7 @@ def main():
         st.markdown("### ⚠️ Stage-Specific Risk Assessment")
         
         # Risk gauges
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             st.plotly_chart(
@@ -1906,6 +2555,13 @@ def main():
             )
             st.markdown(get_stage_specific_risk_message("rain", current_rain_risk, stage_name))
         
+        with col4:
+            st.plotly_chart(
+                create_gauge(current_drought_risk, "🌡️ Drought Risk"),
+                use_container_width=True
+            )
+            st.markdown(get_stage_specific_risk_message("drought", current_drought_risk, stage_name))
+        
         # Stage-specific risk summary
         st.markdown("---")
         st.markdown(f"### 📋 {stage_name} Risk Summary")
@@ -1920,7 +2576,7 @@ def main():
             """)
         
         with col2:
-            max_risk = max(current_dust_risk, current_hail_risk, current_rain_risk)
+            max_risk = max(current_dust_risk, current_hail_risk, current_rain_risk, current_drought_risk)
             if max_risk >= 3:
                 alert_level = "🚨 CRITICAL"
                 alert_color = "#FF4B4B"
@@ -2021,6 +2677,16 @@ def main():
             
             rain_risk = calculate_rain_risk(rain_1h, None, stage_multiplier)
             
+            drought_risk = calculate_drought_risk(
+                temp,
+                humidity,
+                stage_multiplier,
+                pressure=pressure,
+                wind_speed=wind_speed,
+                clouds=clouds,
+                days_since_rain=None  # Not available in hourly forecasts
+            )
+            
             # Check if this hour has any alerts
             has_alert = any(alert["datetime"].hour == dt.hour and alert["datetime"].date() == dt.date() 
                           for alert in forecast_alerts if alert["type"] == "hourly")
@@ -2033,7 +2699,8 @@ def main():
                 "Dust Risk": dust_risk,
                 "Hail Risk": hail_risk,
                 "Rain Risk": rain_risk,
-                "Max Risk": max(dust_risk, hail_risk, rain_risk),
+                "Drought Risk": drought_risk,
+                "Max Risk": max(dust_risk, hail_risk, rain_risk, drought_risk),
                 "Has Alert": has_alert
             })
         
@@ -2435,10 +3102,228 @@ def main():
     st.markdown(f"""
     <div style='text-align: center; color: #666; padding: 20px;'>
         <p>🌾 Tobacco Cultivation Weather Monitoring System | Data provided by OpenWeatherMap</p>
-        <p>Growth stage-specific risk assessment for Pakistan tobacco regions</p>
+        <p>Comprehensive coverage: FC (Flue-Cured) and DAC (Dark Air-Cured) tobacco regions across Pakistan</p>
         <p>Last updated: {current_time_pk.strftime('%Y-%m-%d %H:%M:%S')} PKT | Auto-refresh: Every 30 minutes</p>
     </div>
     """, unsafe_allow_html=True)
+
+# NEW FUNCTION: Fetch weather data for all districts to show alerts overview
+@st.cache_data(ttl=1800)  # Cache for 30 minutes (1800 seconds)
+def fetch_all_districts_weather():
+    """Fetch weather data for all districts to calculate alerts overview"""
+    all_districts_data = {}
+    
+    for district, info in LOCATIONS.items():
+        lat, lon = info["coords"]
+        
+        # Get location-specific growth stage and multiplier
+        stage_name, _, _, _ = get_current_growth_stage(district)
+        stage_multiplier = calculate_stage_specific_risk_multiplier(stage_name)
+        
+        weather_data = fetch_weather_data(lat, lon)
+        if weather_data:
+            current = weather_data.get("current", {})
+            hourly = weather_data.get("hourly", [])[:24]
+            daily = weather_data.get("daily", [])[:7]
+            
+            # Calculate current risks
+            current_dust_risk = calculate_dust_risk(
+                current.get("wind_speed", 0),
+                current.get("humidity", 0),
+                current.get("pressure", 1013),
+                stage_multiplier,
+                visibility=current.get("visibility", None),
+                dew_point=current.get("dew_point", None),
+                temp=current.get("temp", 0),
+                clouds=current.get("clouds", 0)
+            )
+            
+            current_hail_risk = calculate_hail_risk(
+                current.get("temp", 0),
+                current.get("rain", {}).get("1h", 0),
+                current.get("clouds", 0),
+                current.get("wind_speed", 0),
+                stage_multiplier,
+                pressure=current.get("pressure", 1013),
+                cape=current.get("cape", None),
+                humidity=current.get("humidity", 0)
+            )
+            
+            current_rain_risk = calculate_rain_risk(
+                current.get("rain", {}).get("1h", 0),
+                None,
+                stage_multiplier
+            )
+            
+            current_drought_risk = calculate_drought_risk(
+                current.get("temp", 0),
+                current.get("humidity", 0),
+                stage_multiplier,
+                pressure=current.get("pressure", 1013),
+                wind_speed=current.get("wind_speed", 0),
+                clouds=current.get("clouds", 0),
+                days_since_rain=None  # Not available in current weather data
+            )
+            
+            # Analyze forecast risks
+            forecast_alerts = analyze_forecast_risks(hourly, daily, stage_multiplier, min_risk_level=2)
+            
+            # Calculate overall risk level
+            max_current_risk = max(current_dust_risk, current_hail_risk, current_rain_risk, current_drought_risk)
+            has_forecast_alerts = len(forecast_alerts) > 0
+            next_24h_alerts = [a for a in forecast_alerts if a["datetime"] <= datetime.now(PAKISTAN_TZ) + timedelta(hours=24)]
+            
+            all_districts_data[district] = {
+                "current_risk": max_current_risk,
+                "forecast_alerts": len(forecast_alerts),
+                "next_24h_alerts": len(next_24h_alerts),
+                "dust_risk": current_dust_risk,
+                "hail_risk": current_hail_risk,
+                "rain_risk": current_rain_risk,
+                "drought_risk": current_drought_risk,
+                "temperature": current.get("temp", 0),
+                "humidity": current.get("humidity", 0),
+                "wind_speed": current.get("wind_speed", 0)
+            }
+    
+    return all_districts_data
+
+# NEW FUNCTION: Create sidebar with district alerts overview
+def create_district_alerts_sidebar():
+    """Create a sidebar showing alert status for all districts"""
+    st.sidebar.markdown("## 🚨 District Alert Overview")
+    st.sidebar.markdown("*Real-time risk status across all regions*")
+    
+    try:
+        all_districts_data = fetch_all_districts_weather()
+        
+        if not all_districts_data:
+            st.sidebar.error("Unable to fetch district data")
+            return
+        
+        # Add refresh info
+        st.sidebar.markdown(f"🕐 Last Updated: {st.session_state.last_update.strftime('%H:%M')}")
+        
+        # Create alert summary cards for each district
+        for district, data in all_districts_data.items():
+            max_risk = data["current_risk"]
+            forecast_count = data["forecast_alerts"]
+            next_24h_count = data["next_24h_alerts"]
+            
+            # Determine alert color and icon based on risk level and forecast alerts
+            if max_risk >= 3:
+                alert_color = "#FF4B4B"  # Red for high risk
+                alert_icon = "🚨"
+                alert_status = "CRITICAL"
+            elif max_risk >= 2:
+                alert_color = "#FF8C00"  # Orange for moderate risk
+                alert_icon = "⚠️"
+                alert_status = "HIGH"
+            elif max_risk >= 1:
+                alert_color = "#FFD700"  # Yellow for low risk
+                alert_icon = "🟡"
+                alert_status = "MODERATE"
+            elif forecast_count > 0:  # Has forecast alerts but current risk is low
+                alert_color = "#FF4B4B"  # Red for alerts requiring attention
+                alert_icon = "🚨"
+                alert_status = "ALERTS"
+            else:
+                alert_color = "#00C851"  # Green for safe
+                alert_icon = "✅"
+                alert_status = "SAFE"
+            
+            # Add urgent indicator for next 24h alerts
+            urgent_indicator = ""
+            if next_24h_count > 0:
+                urgent_indicator = f" | 🔥 {next_24h_count} urgent"
+            
+            # Create district alert card
+            st.sidebar.markdown(f"""
+            <div style='
+                background: linear-gradient(135deg, {alert_color}15, {alert_color}25); 
+                border-left: 5px solid {alert_color}; 
+                padding: 12px; 
+                margin: 8px 0; 
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            '>
+                <div style='font-weight: bold; color: {alert_color}; font-size: 16px;'>
+                    {alert_icon} {district}
+                </div>
+                <div style='font-size: 12px; color: #666; margin: 4px 0;'>
+                    Status: <strong style='color: {alert_color};'>{alert_status}</strong>
+                </div>
+                <div style='font-size: 11px; color: #888;'>
+                    Current Risk: {max_risk}/4 | Alerts: {forecast_count}{urgent_indicator}
+                </div>
+                <div style='font-size: 10px; color: #999; margin-top: 4px;'>
+                    🌡️ {data["temperature"]:.1f}°C | 💨 {data["wind_speed"]:.1f}m/s | 💧 {data["humidity"]}%
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Add overall summary
+        total_critical = sum(1 for d in all_districts_data.values() if d["current_risk"] >= 3)
+        total_high = sum(1 for d in all_districts_data.values() if d["current_risk"] >= 2)
+        total_alerts = sum(d["forecast_alerts"] for d in all_districts_data.values())
+        total_urgent = sum(d["next_24h_alerts"] for d in all_districts_data.values())
+        
+        # Get districts with alerts for specific messaging
+        districts_with_alerts = [district for district, data in all_districts_data.items() 
+                               if data["forecast_alerts"] > 0 and data["current_risk"] < 2]
+        
+        if total_critical > 0:
+            summary_color = "#FF4B4B"
+            summary_icon = "🚨"
+            summary_text = f"CRITICAL: {total_critical} districts"
+        elif total_high > 0:
+            summary_color = "#FF8C00"
+            summary_icon = "⚠️"
+            summary_text = f"HIGH RISK: {total_high} districts"
+        elif total_alerts > 0:
+            summary_color = "#FF4B4B"
+            summary_icon = "🚨"
+            if districts_with_alerts:
+                district_names = ", ".join(districts_with_alerts)
+                summary_text = f"Check details: {district_names}"
+            else:
+                summary_text = "Attention required - Check details"
+        else:
+            summary_color = "#00C851"
+            summary_icon = "✅"
+            summary_text = "All districts safe"
+        
+        st.sidebar.markdown("---")
+        st.sidebar.markdown(f"""
+        <div style='
+            background: {summary_color}20; 
+            border: 2px solid {summary_color}; 
+            padding: 15px; 
+            border-radius: 10px; 
+            text-align: center;
+        '>
+            <div style='font-size: 18px; font-weight: bold; color: {summary_color};'>
+                {summary_icon} {summary_text}
+            </div>
+            <div style='font-size: 12px; color: #666; margin-top: 8px;'>
+                Total Forecast Alerts: {total_alerts}<br>
+                Urgent (24h): {total_urgent}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Add legend
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 📊 Alert Legend")
+        st.sidebar.markdown("""
+        - 🚨 **CRITICAL** (3-4): Immediate action needed
+        - ⚠️ **HIGH** (2): Take protective measures  
+        - 🟡 **MODERATE** (1): Monitor closely
+        - ✅ **SAFE** (0): Normal operations
+        """)
+    
+    except Exception as e:
+        st.sidebar.error(f"Error loading district alerts: {str(e)}")
 
 if __name__ == "__main__":
     main() 

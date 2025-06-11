@@ -5,7 +5,7 @@ API_KEY = "fdb65b20ef3e55d681c05652324d4839"
 
 LOCATIONS = {
     "Mardan": (34.201, 72.050),
-    "Multan": (30.473469, 71.486885),
+    "Multan": (30.157, 71.524),
     "Swabi": (34.120, 72.470),
     "Charsadda": (34.150, 71.740)
 }
@@ -31,35 +31,20 @@ def classify_weather_hourly(row):
     clouds = row["clouds (%)"]
     pressure = row["pressure (hPa)"]
 
-    # Improved dust storm logic - more realistic thresholds
-    # Only consider dust risk when wind ≥8 m/s, humidity ≤40%, pressure ≤998 hPa
-    dust_risk = False
-    if wind >= 8 and humidity <= 40 and pressure <= 998:
-        if wind >= 15 and humidity <= 20 and pressure <= 990:
-            dust_risk = "Severe"
-        elif wind >= 12 and humidity <= 25 and pressure <= 995:
-            dust_risk = "Moderate"
-        elif wind >= 10 and humidity <= 30:
-            dust_risk = "Moderate"
-        elif wind >= 8:
-            dust_risk = "Mild"
-    
-    # Hailstorm logic (unchanged)
-    hail_risk = False
-    if temp > 25 and humidity > 60 and rain > 3 and clouds > 80 and wind > 4 and pressure < 1005:
-        hail_risk = "Severe"
-    elif temp > 25 and rain > 2 and clouds > 60:
-        hail_risk = "Moderate"
-    elif rain > 1 and clouds > 40:
-        hail_risk = "Mild"
-
-    # Return the highest risk
-    if dust_risk:
-        return f"Dust Storm Risk ({dust_risk})"
-    elif hail_risk:
-        return f"Hailstorm Risk ({hail_risk})"
+    if wind > 15:
+        intensity = "Severe"
+    elif wind > 10:
+        intensity = "Moderate"
+    elif wind > 6:
+        intensity = "Mild"
     else:
-        return "Clear or Normal"
+        intensity = "No or Low Risk"
+
+    if wind > 8 and humidity < 30 and pressure < 1005 and rain < 0.2:
+        return f"Dust Storm Risk ({intensity})"
+    if temp > 25 and humidity > 60 and rain > 3 and clouds > 80 and wind > 4 and pressure < 1005:
+        return f"Hailstorm Risk ({intensity})"
+    return "Clear or Normal"
 
 def classify_weather_daily(row):
     wind = row["wind_speed (m/s)"]
@@ -69,35 +54,20 @@ def classify_weather_daily(row):
     clouds = row["clouds (%)"]
     pressure = row["pressure (hPa)"]
 
-    # Improved dust storm logic - more realistic thresholds
-    # Only consider dust risk when wind ≥8 m/s, humidity ≤40%, pressure ≤998 hPa
-    dust_risk = False
-    if wind >= 8 and humidity <= 40 and pressure <= 998:
-        if wind >= 15 and humidity <= 20 and pressure <= 990:
-            dust_risk = "Severe"
-        elif wind >= 12 and humidity <= 25 and pressure <= 995:
-            dust_risk = "Moderate"
-        elif wind >= 10 and humidity <= 30:
-            dust_risk = "Moderate"
-        elif wind >= 8:
-            dust_risk = "Mild"
-    
-    # Hailstorm logic (unchanged)
-    hail_risk = False
-    if temp > 25 and humidity > 60 and rain > 3 and clouds > 80 and wind > 4 and pressure < 1005:
-        hail_risk = "Severe"
-    elif temp > 25 and rain > 2 and clouds > 60:
-        hail_risk = "Moderate"
-    elif rain > 1 and clouds > 40:
-        hail_risk = "Mild"
-
-    # Return the highest risk
-    if dust_risk:
-        return f"Dust Storm Risk ({dust_risk})"
-    elif hail_risk:
-        return f"Hailstorm Risk ({hail_risk})"
+    if wind > 15:
+        intensity = "Severe"
+    elif wind > 10:
+        intensity = "Moderate"
+    elif wind > 6:
+        intensity = "Mild"
     else:
-        return "Clear or Normal"
+        intensity = "No or Low Risk"
+
+    if wind > 8 and humidity < 30 and pressure < 1005 and rain < 0.2:
+        return f"Dust Storm Risk ({intensity})"
+    if temp > 25 and humidity > 60 and rain > 3 and clouds > 80 and wind > 4 and pressure < 1005:
+        return f"Hailstorm Risk ({intensity})"
+    return "Clear or Normal"
 
 # Fetch and display forecasts
 for city, (lat, lon) in LOCATIONS.items():

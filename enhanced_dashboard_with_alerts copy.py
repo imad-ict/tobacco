@@ -1,3 +1,25 @@
+"""
+Enhanced Weather Risk Assessment Dashboard for Tobacco Cultivation
+================================================================
+
+This is an enhanced version of the original dashboard that includes:
+- All original functionality (exact same UI in main area)
+- NEW: District Alert Overview sidebar showing real-time risk status for all districts
+- Color-coded alert indicators for quick visual assessment across all regions
+- Summary statistics showing total alerts and urgent warnings
+
+Features:
+- Real-time weather monitoring for 4 tobacco cultivation regions in Pakistan
+- Risk assessment for dust storms, hail storms, and heavy rain
+- Growth stage-specific risk multipliers
+- 24-hour and 7-day weather forecasts with risk analysis
+- Interactive charts and visualizations
+- Automatic refresh every 30 minutes
+- District-wide alert overview in sidebar (NEW)
+
+Created: Enhanced version with district alerts overview
+"""
+
 import streamlit as st
 import pandas as pd
 import requests
@@ -12,7 +34,7 @@ st.set_page_config(
     page_title="Weather Risk Assessment - Tobacco Cultivation",
     page_icon="🌾",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"  # Changed to expanded to show alerts
 )
 
 # Pakistan timezone
@@ -1396,6 +1418,9 @@ def create_risk_summary_cards(forecast_alerts):
             st.success("🌧️ **Rain Risks:** No alerts")
 
 def main():
+    # NEW: Add district alerts sidebar
+    create_district_alerts_sidebar()
+    
     # Add auto-refresh info in header
     current_time_pk = datetime.now(PAKISTAN_TZ)
     next_update = st.session_state.last_update + timedelta(minutes=30)
@@ -2439,6 +2464,210 @@ def main():
         <p>Last updated: {current_time_pk.strftime('%Y-%m-%d %H:%M:%S')} PKT | Auto-refresh: Every 30 minutes</p>
     </div>
     """, unsafe_allow_html=True)
+
+# NEW FUNCTION: Fetch weather data for all districts to show alerts overview
+@st.cache_data(ttl=1800)  # Cache for 30 minutes (1800 seconds)
+def fetch_all_districts_weather():
+    """Fetch weather data for all districts to calculate alerts overview"""
+    all_districts_data = {}
+    stage_name, _, _, _ = get_current_growth_stage()
+    stage_multiplier = calculate_stage_specific_risk_multiplier(stage_name)
+    
+    for district, info in LOCATIONS.items():
+        lat, lon = info["coords"]
+        weather_data = fetch_weather_data(lat, lon)
+        if weather_data:
+            current = weather_data.get("current", {})
+            hourly = weather_data.get("hourly", [])[:24]
+            daily = weather_data.get("daily", [])[:7]
+            
+            # Calculate current risks
+            current_dust_risk = calculate_dust_risk(
+                current.get("wind_speed", 0),
+                current.get("humidity", 0),
+                current.get("pressure", 1013),
+                stage_multiplier,
+                visibility=current.get("visibility", None),
+                dew_point=current.get("dew_point", None),
+                temp=current.get("temp", 0),
+                clouds=current.get("clouds", 0)
+            )
+            
+            current_hail_risk = calculate_hail_risk(
+                current.get("temp", 0),
+                current.get("rain", {}).get("1h", 0),
+                current.get("clouds", 0),
+                current.get("wind_speed", 0),
+                stage_multiplier,
+                pressure=current.get("pressure", 1013),
+                cape=current.get("cape", None),
+                humidity=current.get("humidity", 0)
+            )
+            
+            current_rain_risk = calculate_rain_risk(
+                current.get("rain", {}).get("1h", 0),
+                None,
+                stage_multiplier
+            )
+            
+            # Analyze forecast risks
+            forecast_alerts = analyze_forecast_risks(hourly, daily, stage_multiplier, min_risk_level=2)
+            
+            # Calculate overall risk level
+            max_current_risk = max(current_dust_risk, current_hail_risk, current_rain_risk)
+            has_forecast_alerts = len(forecast_alerts) > 0
+            next_24h_alerts = [a for a in forecast_alerts if a["datetime"] <= datetime.now(PAKISTAN_TZ) + timedelta(hours=24)]
+            
+            all_districts_data[district] = {
+                "current_risk": max_current_risk,
+                "forecast_alerts": len(forecast_alerts),
+                "next_24h_alerts": len(next_24h_alerts),
+                "dust_risk": current_dust_risk,
+                "hail_risk": current_hail_risk,
+                "rain_risk": current_rain_risk,
+                "temperature": current.get("temp", 0),
+                "humidity": current.get("humidity", 0),
+                "wind_speed": current.get("wind_speed", 0)
+            }
+    
+    return all_districts_data
+
+# NEW FUNCTION: Create sidebar with district alerts overview
+def create_district_alerts_sidebar():
+    """Create a sidebar showing alert status for all districts"""
+    st.sidebar.markdown("## 🚨 District Alert Overview")
+    st.sidebar.markdown("*Real-time risk status across all regions*")
+    
+    try:
+        all_districts_data = fetch_all_districts_weather()
+        
+        if not all_districts_data:
+            st.sidebar.error("Unable to fetch district data")
+            return
+        
+        # Add refresh info
+        st.sidebar.markdown(f"🕐 Last Updated: {st.session_state.last_update.strftime('%H:%M')}")
+        
+        # Create alert summary cards for each district
+        for district, data in all_districts_data.items():
+            max_risk = data["current_risk"]
+            forecast_count = data["forecast_alerts"]
+            next_24h_count = data["next_24h_alerts"]
+            
+            # Determine alert color and icon based on risk level and forecast alerts
+            if max_risk >= 3:
+                alert_color = "#FF4B4B"  # Red for high risk
+                alert_icon = "🚨"
+                alert_status = "CRITICAL"
+            elif max_risk >= 2:
+                alert_color = "#FF8C00"  # Orange for moderate risk
+                alert_icon = "⚠️"
+                alert_status = "HIGH"
+            elif max_risk >= 1:
+                alert_color = "#FFD700"  # Yellow for low risk
+                alert_icon = "🟡"
+                alert_status = "MODERATE"
+            elif forecast_count > 0:  # Has forecast alerts but current risk is low
+                alert_color = "#FF4B4B"  # Red for alerts requiring attention
+                alert_icon = "🚨"
+                alert_status = "ALERTS"
+            else:
+                alert_color = "#00C851"  # Green for safe
+                alert_icon = "✅"
+                alert_status = "SAFE"
+            
+            # Add urgent indicator for next 24h alerts
+            urgent_indicator = ""
+            if next_24h_count > 0:
+                urgent_indicator = f" | 🔥 {next_24h_count} urgent"
+            
+            # Create district alert card
+            st.sidebar.markdown(f"""
+            <div style='
+                background: linear-gradient(135deg, {alert_color}15, {alert_color}25); 
+                border-left: 5px solid {alert_color}; 
+                padding: 12px; 
+                margin: 8px 0; 
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            '>
+                <div style='font-weight: bold; color: {alert_color}; font-size: 16px;'>
+                    {alert_icon} {district}
+                </div>
+                <div style='font-size: 12px; color: #666; margin: 4px 0;'>
+                    Status: <strong style='color: {alert_color};'>{alert_status}</strong>
+                </div>
+                <div style='font-size: 11px; color: #888;'>
+                    Current Risk: {max_risk}/4 | Alerts: {forecast_count}{urgent_indicator}
+                </div>
+                <div style='font-size: 10px; color: #999; margin-top: 4px;'>
+                    🌡️ {data["temperature"]:.1f}°C | 💨 {data["wind_speed"]:.1f}m/s | 💧 {data["humidity"]}%
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Add overall summary
+        total_critical = sum(1 for d in all_districts_data.values() if d["current_risk"] >= 3)
+        total_high = sum(1 for d in all_districts_data.values() if d["current_risk"] >= 2)
+        total_alerts = sum(d["forecast_alerts"] for d in all_districts_data.values())
+        total_urgent = sum(d["next_24h_alerts"] for d in all_districts_data.values())
+        
+        # Get districts with alerts for specific messaging
+        districts_with_alerts = [district for district, data in all_districts_data.items() 
+                               if data["forecast_alerts"] > 0 and data["current_risk"] < 2]
+        
+        if total_critical > 0:
+            summary_color = "#FF4B4B"
+            summary_icon = "🚨"
+            summary_text = f"CRITICAL: {total_critical} districts"
+        elif total_high > 0:
+            summary_color = "#FF8C00"
+            summary_icon = "⚠️"
+            summary_text = f"HIGH RISK: {total_high} districts"
+        elif total_alerts > 0:
+            summary_color = "#FF4B4B"
+            summary_icon = "🚨"
+            if districts_with_alerts:
+                district_names = ", ".join(districts_with_alerts)
+                summary_text = f"Check details: {district_names}"
+            else:
+                summary_text = "Attention required - Check details"
+        else:
+            summary_color = "#00C851"
+            summary_icon = "✅"
+            summary_text = "All districts safe"
+        
+        st.sidebar.markdown("---")
+        st.sidebar.markdown(f"""
+        <div style='
+            background: {summary_color}20; 
+            border: 2px solid {summary_color}; 
+            padding: 15px; 
+            border-radius: 10px; 
+            text-align: center;
+        '>
+            <div style='font-size: 18px; font-weight: bold; color: {summary_color};'>
+                {summary_icon} {summary_text}
+            </div>
+            <div style='font-size: 12px; color: #666; margin-top: 8px;'>
+                Total Forecast Alerts: {total_alerts}<br>
+                Urgent (24h): {total_urgent}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Add legend
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("### 📊 Alert Legend")
+        st.sidebar.markdown("""
+        - 🚨 **CRITICAL** (3-4): Immediate action needed
+        - ⚠️ **HIGH** (2): Take protective measures  
+        - 🟡 **MODERATE** (1): Monitor closely
+        - ✅ **SAFE** (0): Normal operations
+        """)
+        
+    except Exception as e:
+        st.sidebar.error(f"Error loading district alerts: {str(e)}")
 
 if __name__ == "__main__":
     main() 
